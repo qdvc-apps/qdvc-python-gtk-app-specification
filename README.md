@@ -1,0 +1,1 @@
+# qdvc-python-gtk-app-specification
