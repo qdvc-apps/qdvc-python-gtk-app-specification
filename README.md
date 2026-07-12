@@ -1,4 +1,4 @@
-# QDVC Application Specification
+# QDVC Python desktop applications for Linux (GTK3/GTK4) - common specification
 
 A shared specification for building desktop applications in the QDVC family
 using **Python 3 + GTK 3** as the primary target, with a **parallel GTK 4 /
