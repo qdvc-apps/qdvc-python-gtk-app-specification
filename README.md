@@ -274,13 +274,54 @@ single main window; `do_open` MUST route a folder argument.
 - The menubar SHOULD use the canonical top-level menus **File, Edit, View,
   Tools, Help**, in that order, including only those the app needs; an app MAY
   add a domain menu (e.g. *Task*).
+- Top-level menus and menu items SHOULD use mnemonic labels
+  (`Gtk.MenuItem.new_with_mnemonic("_File")`, etc.) so `Alt`+letter access
+  works. `Gtk.ApplicationWindow` provides the mnemonic activation automatically.
 - **Edit → Preferences** MUST be the home of the preferences command.
 - Menu items SHOULD carry icons where appropriate. Items with icons MUST be
-  built as a `Box(Image + Label)` inside a plain `Gtk.MenuItem` and MUST NOT use
-  `Gtk.ImageMenuItem` (removed in GTK4, warns in GTK3). The app SHOULD provide a
-  shared helper (e.g. `_menu_item(label, icon)`).
+  built with `Gtk.ImageMenuItem` (see the note below on deprecation), and the
+  app SHOULD set `set_always_show_image(True)` on them so the icon renders even
+  when the desktop's global `gtk-menu-images` setting is off. The app SHOULD
+  provide a shared helper (e.g. `_menu_item(label, icon, accel=...)`) that
+  builds the item, attaches its accelerator via `add_accelerator` with
+  `AccelFlags.VISIBLE`, and resolves the icon name against the current theme
+  with a graceful fallback (e.g. `help-about` → `dialog-information`) so a
+  missing themed icon never leaves a broken slot.
+- The app MUST NOT build menu items as a custom `Box(Image + Label)` inside a
+  plain `Gtk.MenuItem`. Although that pattern avoids the deprecated
+  `Gtk.ImageMenuItem`, in the GTK 3 target it breaks left-padding alignment,
+  suppresses native accelerator rendering, and interferes with mnemonic
+  handling — letting GTK own the icon/checkmark gutter and accelerator display
+  via `Gtk.ImageMenuItem` is required for the classic look to render correctly.
 - Help SHOULD include an About item and MAY include an entry opening the
   shortcuts reference.
+
+**On GTK 3 deprecated widgets (menubar rationale).** The GTK 3 build
+deliberately embraces the mature, frozen, MATE-aligned widget set —
+including `Gtk.ImageMenuItem` and, where useful,
+`GtkUIManager`/`GtkAction`/`GtkActionGroup` — and avoiding these deprecated
+widgets is an explicit **non-goal** for the GTK 3 target. The rationale, which
+implementers SHOULD understand before "modernising" this layer:
+- All of these were deprecated in the **same** GTK release (3.10); none is
+  "more deprecated" than another, and none is removed within GTK 3.
+- GTK **3.24 is the final GTK 3 minor series** and is in bug-fix-only mode with
+  a frozen API surface, so these widgets will keep working for the whole
+  remaining life of GTK 3; there is no future GTK 3.x that could remove them.
+- MATE (the target environment) still ships these widgets and even maintains its
+  own `mate_image_menu_item` API to preserve the icon-in-menu look, so using
+  `Gtk.ImageMenuItem` makes the app blend into the environment it targets.
+- Avoiding them does **not** ease a future GTK 4 migration: GTK 4 removed
+  `Gtk.ImageMenuItem`, `GtkUIManager`, and `GtkAction` entirely in favour of
+  model-based `GMenu`/`GAction` menus, so the GTK 3 menu layer does not port
+  across regardless of which GTK 3 widgets it uses. Modern non-deprecated menu
+  APIs (`Gio.Action` etc.) are the concern of the separate GTK 4 front-end
+  (§9), not the GTK 3 target.
+
+Implementers MAY, as a separate and deliberate decision, adopt an
+action-centric command layer in GTK 3 using **`Gio.SimpleAction` +
+`Gtk.Application` actions** with `set_accels_for_action` (not the equally
+deprecated `GtkUIManager`) to remove menu/toolbar/accelerator duplication; this
+is the one approach that also survives into GTK 4. It is not required.
 
 **Toolbar.**
 - The toolbar MUST be a subset of the menubar's most-used actions.
