@@ -196,6 +196,10 @@ leave the dispatcher without a valid backend.
 - The model SHOULD provide a `validate()` method returning categorised problem
   lists (orphans, dangling references, missing linked files, …) that the UI can
   render as a report.
+- Dates MUST be stored in **ISO 8601 `YYYY-MM-DD`** format in all data files,
+  regardless of how they are entered or displayed. The UI layer is responsible
+  for entry and localised display (§8.2); the stored representation MUST be this
+  canonical form.
 
 ---
 
@@ -268,7 +272,9 @@ toolbar, content area, status bar — top to bottom.
 `Gtk.Application` (id `qdvc.<App>`, `HANDLES_OPEN` where a workspace path is
 accepted); `do_startup` MUST set the default icon; `do_activate` MUST build the
 single main window; `do_open` MUST route a folder argument.
-`GLib.set_prgname(...)` MUST run at import.
+`GLib.set_prgname(...)` MUST run at import. The main window MUST be centred on
+screen on startup (`Gtk.Window.set_position(Gtk.WindowPosition.CENTER)`, or an
+equivalent explicit centring before first show).
 
 **Menubar.**
 - The menubar SHOULD use the canonical top-level menus **File, Edit, View,
@@ -293,8 +299,8 @@ single main window; `do_open` MUST route a folder argument.
   suppresses native accelerator rendering, and interferes with mnemonic
   handling — letting GTK own the icon/checkmark gutter and accelerator display
   via `Gtk.ImageMenuItem` is required for the classic look to render correctly.
-- Help SHOULD include an About item and MAY include an entry opening the
-  shortcuts reference.
+- Help MUST include an **About** item (see §8.1) and MAY include an entry
+  opening the shortcuts reference.
 
 **On GTK 3 deprecated widgets (menubar rationale).** The GTK 3 build
 deliberately embraces the mature, frozen, MATE-aligned widget set —
@@ -337,6 +343,40 @@ the bottom for transient status.
 whether a workspace is open; context-scoped actions MUST recompute on the
 relevant selection/tab-switch signals. Where a command appears in both menu and
 toolbar, both widgets MUST be toggled together.
+
+### 8.1 About window (both front-ends)
+
+Every app MUST provide an About window, reachable from Help → About in GTK 3 and
+from the primary menu's final section in GTK 4 (§9).
+
+- The GTK 3 implementation MUST use the ready-made `Gtk.AboutDialog`
+  (`transient_for` the main window, `modal=True`); the GTK 4 implementation MUST
+  use `Adw.AboutWindow` (or `Gtk.AboutDialog` where libadwaita is too old).
+- It MUST set the program name (`APP_NAME`) and a one-line description
+  (comments).
+- It MUST display the app's icon as the dialog logo. The logo MUST follow the
+  same resolution order as the app icon (§7.3): a user-configured custom icon
+  first (loaded and scaled as a `GdkPixbuf`, e.g. via
+  `GdkPixbuf.Pixbuf.new_from_file_at_size(source, 64, 64)` and `set_logo(...)`,
+  preferring an SVG then the largest PNG), then the installed themed
+  `ICON_NAME`, then the stock themed fallback — via `set_logo_icon_name(...)`.
+  The custom-icon load MUST be guarded so a failure falls through to the themed
+  name rather than raising.
+- It MUST NOT declare a licence or a version number unless and until the app
+  explicitly requires one. In particular the app MUST NOT call
+  `set_version(...)` or `set_license*(...)` with placeholder values; these are
+  added only when there is a real licence/version to state.
+
+### 8.2 Date entry (both front-ends)
+
+- Any date entered by the user MUST be entered through a date picker, not
+  free-form text. In GTK 3 this SHOULD be a `Gtk.Calendar` (e.g. in a popover or
+  a small picker dialog anchored to the field); in GTK 4 it SHOULD likewise be a
+  `Gtk.Calendar`-based picker. The app MUST NOT rely on a plain text entry that
+  the user types a date into.
+- The picker's value MUST be serialised to the canonical `YYYY-MM-DD` storage
+  format (§6) when written. Any localised or human-friendly rendering is display
+  only and MUST NOT change what is stored.
 
 ---
 
@@ -413,10 +453,15 @@ branching on `sys.platform` / `os.name`:
 Every app MUST ship two maintenance documents inside a `docs/` folder, plus a
 root README:
 
-- **`docs/MAINTENANCE.md`** MUST cover design philosophy, runtime requirements,
-  directory & file layout, data formats, the model/load pipeline, query &
-  mutation API, validation, the UI layer, testing approach, a "common
-  maintenance tasks — where to touch" section, and deployment.
+- **`docs/MAINTENANCE.md`** MUST reference this specification as the canonical
+  source of shared conventions — by name and URL,
+  `https://github.com/qdvc-apps/qdvc-python-gtk-app-specification/` — and MUST
+  NOT duplicate material from it. It MUST document only what is specific to this
+  app: its domain model and data formats, its module map where it extends the
+  standard layout, app-specific maintenance tasks ("where to touch"), and
+  — most importantly — **any deviations from this spec**, each stated
+  explicitly with its rationale. Where a topic is fully covered by the spec,
+  MAINTENANCE.md MUST link to the relevant section rather than restate it.
 - **`docs/MAINTENANCE_GTK3_GTK4.md`** MUST provide the element-by-element
   GTK3↔GTK4 comparison and the list-model/data-binding cheat-sheet. An app that
   has not yet gained a GTK 4 front-end MAY omit this file until it does.
@@ -482,7 +527,8 @@ To scaffold a new `qdvc-<app>`:
       `workspace.py`, `models.py`, `naming.py`, `ui_prefs.py` (incl.
       `SHORTCUTS`), `platform_utils.py`.
 - [ ] `qdvc/gtk3/` (all `gtk3_*`): `gtk3_app.py`, `gtk3_main_window.py`
-      (menubar File/Edit/View/[Tools]/Help with icons; Edit→Preferences;
+      (window centred on startup; menubar File/Edit/View/[Tools]/Help with
+      `Gtk.ImageMenuItem` icons + mnemonics; Edit→Preferences; Help→About;
       toolbar subset with `toolbar_style` below/beside), `gtk3_preferences.py`,
       `gtk3_shortcuts.py`, plus tabs/dialogs/widgets.
 - [ ] `qdvc/gtk4/` (all `gtk4_*`): `gtk4_app.py`, `gtk4_window.py`,
@@ -490,10 +536,15 @@ To scaffold a new `qdvc-<app>`:
       selector), `gtk4_shortcuts.py`, plus views/dialogs/factories.
 - [ ] `GLib.set_prgname("qdvc-<app>")`; themed `ICON_NAME` set as default +
       per-window; optional custom-icon preference.
+- [ ] About window (both front-ends): app icon as logo, program name +
+      description, **no** licence/version until required (§8.1).
+- [ ] Date fields use a `Gtk.Calendar` picker (no free-text entry); dates stored
+      as `YYYY-MM-DD` (§6, §8.2).
 - [ ] Workspace on disk: plaintext files (YAML / Markdown+frontmatter / CSV /
       domain formats), atomic writes, disposable index with `INDEX_VERSION`,
       `validate()`.
-- [ ] `docs/MAINTENANCE.md` + `docs/MAINTENANCE_GTK3_GTK4.md`; root `README.md`
-      with `.desktop` block (`StartupWMClass=qdvc-<app>`).
+- [ ] `docs/MAINTENANCE.md` (references this spec by URL, does not duplicate it,
+      documents app specifics + deviations) + `docs/MAINTENANCE_GTK3_GTK4.md`;
+      root `README.md` with `.desktop` block (`StartupWMClass=qdvc-<app>`).
 - [ ] Display-free tests: pure-model tests + fake-`gi` import smoke test;
       `py_compile` all modules.
